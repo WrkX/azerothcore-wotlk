@@ -98,8 +98,6 @@ enum WarriorPassives
     SWORD_SPEC1                             = 12281,
     SWORD_SPEC2                             = 12812,
     SWORD_SPEC3                             = 12813,
-    SWORD_SPEC4                             = 12814,
-    SWORD_SPEC5                             = 12815,
     IMPROVED_HAMSTRING                      = 23695,//rank 3
     TRAUMA1                                 = 46854,
     TRAUMA2                                 = 46855,
@@ -121,7 +119,7 @@ enum WarriorPassives
     BLOODSURGE                              = 46915,//rank 3
     WARBRINGER                              = 57499,
     CRITICAL_BLOCK                          = 47296,//rank 3
-    WRECKING_CREW                           = 56614,//rank 5
+    WRECKING_CREW                           = 56612,//rank 5
     DAMAGE_SHIELD                           = 58874,//rank 2
 //other
     GLYPH_HEROIC_STRIKE                     = 58357,
@@ -2176,8 +2174,6 @@ public:
             Item const* mhWeap = GetEquips(BOT_SLOT_MAINHAND);
             uint32 weaponSubClass = mhWeap ? mhWeap->GetTemplate()->SubClass : uint32(ITEM_SUBCLASS_WEAPON_WAND);
             bool sword = (weaponSubClass == ITEM_SUBCLASS_WEAPON_SWORD || weaponSubClass == ITEM_SUBCLASS_WEAPON_SWORD2);
-            RefreshAura(SWORD_SPEC5, isArms && sword && level >= 34 ? 1 : 0);
-            RefreshAura(SWORD_SPEC4, isArms && sword && level >= 33 && level < 34 ? 1 : 0);
             RefreshAura(SWORD_SPEC3, isArms && sword && level >= 32 && level < 33 ? 1 : 0);
             RefreshAura(SWORD_SPEC2, isArms && sword && level >= 31 && level < 32 ? 1 : 0);
             RefreshAura(SWORD_SPEC1, isArms && sword && level >= 30 && level < 31 ? 1 : 0);

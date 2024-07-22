@@ -60,7 +60,12 @@ enum WarriorSpells
     SPELL_WARRIOR_VIGILANCE_PROC                    = 50725,
     SPELL_WARRIOR_VIGILANCE_REDIRECT_THREAT         = 59665,
     SPELL_WARRIOR_WHIRLWIND_MAIN                    = 50622,
-    SPELL_WARRIOR_WHIRLWIND_OFF                     = 44949
+    SPELL_WARRIOR_WHIRLWIND_OFF                     = 44949,
+    SPELL_WARRIOR_ANGER_MANAGEMENT                  = 12296,
+    SPELL_WARRIOR_RECKLESSNESS                      = 1719,
+    SPELL_WARRIOR_ONE_HANDED_FINESSE                = 80878,
+    SPELL_WARRIOR_TACTICAL_MASTERY                  = 12677,
+    SPELL_WARRIOR_REND_R1                           = 772
 };
 
 enum WarriorSpellIcons
@@ -147,29 +152,264 @@ class spell_warr_improved_spell_reflection : public AuraScript
 {
     PrepareAuraScript(spell_warr_improved_spell_reflection);
 
-    bool Validate(SpellInfo const* /*spellInfo*/) override
-    {
-        return ValidateSpellInfo({ SPELL_WARRIOR_SPELL_REFLECTION, SPELL_WARRIOR_IMPROVED_SPELL_REFLECTION_TRIGGER });
-    }
+bool Validate(SpellInfo const* /*spellInfo*/) override
+{
+    return ValidateSpellInfo({ SPELL_WARRIOR_SPELL_REFLECTION, SPELL_WARRIOR_IMPROVED_SPELL_REFLECTION_TRIGGER });
+}
 
-    bool CheckProc(ProcEventInfo& eventInfo)
-    {
-        return eventInfo.GetSpellInfo() && eventInfo.GetActor() && eventInfo.GetSpellInfo()->Id == SPELL_WARRIOR_SPELL_REFLECTION;
-    }
+bool CheckProc(ProcEventInfo& eventInfo)
+{
+    return eventInfo.GetSpellInfo() && eventInfo.GetActor() && eventInfo.GetSpellInfo()->Id == SPELL_WARRIOR_SPELL_REFLECTION;
+}
 
-    void OnProc(AuraEffect const* aurEff, ProcEventInfo& eventInfo)
+void OnProc(AuraEffect const* aurEff, ProcEventInfo& eventInfo)
+{
+    PreventDefaultAction();
+    CustomSpellValues values;
+    values.AddSpellMod(SPELLVALUE_MAX_TARGETS, aurEff->GetAmount());
+    values.AddSpellMod(SPELLVALUE_RADIUS_MOD, 2000); // Base range = 100, final range = 20 value / 10000.0f = 0.2f
+    eventInfo.GetActor()->CastCustomSpell(SPELL_WARRIOR_IMPROVED_SPELL_REFLECTION_TRIGGER, values, eventInfo.GetActor(), TRIGGERED_FULL_MASK, nullptr);
+}
+
+void Register() override
+{
+    DoCheckProc += AuraCheckProcFn(spell_warr_improved_spell_reflection::CheckProc);
+    OnEffectProc += AuraEffectProcFn(spell_warr_improved_spell_reflection::OnProc, EFFECT_1, SPELL_AURA_DUMMY);
+}
+};
+
+// 80865 - Improved Mortal Strike
+class spell_warr_improved_mortal_strike : public SpellScript
+{
+    PrepareSpellScript(spell_warr_improved_mortal_strike);
+
+    void HandleScriptEffect(SpellEffIndex /*effIndex*/)
     {
-        PreventDefaultAction();
-        CustomSpellValues values;
-        values.AddSpellMod(SPELLVALUE_MAX_TARGETS, aurEff->GetAmount());
-        values.AddSpellMod(SPELLVALUE_RADIUS_MOD, 2000); // Base range = 100, final range = 20 value / 10000.0f = 0.2f
-        eventInfo.GetActor()->CastCustomSpell(SPELL_WARRIOR_IMPROVED_SPELL_REFLECTION_TRIGGER, values, eventInfo.GetActor(), TRIGGERED_FULL_MASK, nullptr);
+        if (Unit* unitTarget = GetHitUnit())
+            // Refresh Rend on target
+            if (AuraEffect* aur = unitTarget->GetAuraEffect(SPELL_AURA_PERIODIC_DAMAGE, SPELLFAMILY_WARRIOR, 32, 0, 0, GetCaster()->GetGUID()))
+            {
+                aur->GetBase()->RefreshTimersWithMods();
+                aur->ChangeAmount(aur->CalculateAmount(aur->GetCaster()), false);
+            }
     }
 
     void Register() override
     {
-        DoCheckProc += AuraCheckProcFn(spell_warr_improved_spell_reflection::CheckProc);
-        OnEffectProc += AuraEffectProcFn(spell_warr_improved_spell_reflection::OnProc, EFFECT_1, SPELL_AURA_DUMMY);
+        OnEffectHitTarget += SpellEffectFn(spell_warr_improved_mortal_strike::HandleScriptEffect, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+// 12287 - Improved Thunder Clap
+class spell_warr_improved_thunderclap : public SpellScript
+{
+    PrepareSpellScript(spell_warr_improved_thunderclap);
+    
+    void CountTargets(std::list<WorldObject*>& targets)
+    {
+        Unit* caster = GetCaster();
+
+       // Rank 1 33% chance
+        if (caster->HasAura(12287))
+        {
+            if (!roll_chance_i(33))
+                return;
+        }
+           
+        // Rank 2 66% chance
+        else if (caster->HasAura(12665))
+        {
+            if (!roll_chance_i(65))
+                return;
+        }
+        else if (!caster->HasAura(12666))
+            return;
+
+        for (std::list<WorldObject*>::iterator itr = targets.begin(); itr != targets.end(); ++itr)
+        {
+            if (Unit* unit = (*itr)->ToUnit())
+            {
+                if (unit->GetAuraEffect(SPELL_AURA_PERIODIC_DAMAGE, SPELLFAMILY_WARRIOR, 32, 0, 0, GetCaster()->GetGUID()))
+                {
+                    _rank = unit->GetAuraEffect(SPELL_AURA_PERIODIC_DAMAGE, SPELLFAMILY_WARRIOR, 32, 0, 0, GetCaster()->GetGUID())->GetSpellInfo()->GetRank();
+                    _rend = sSpellMgr->GetSpellWithRank(SPELL_WARRIOR_REND_R1, _rank);
+                    _affected += 1;
+                }
+            }
+        }
+    }
+
+    void HandleAfterHit()
+    {
+        Unit* hitUnit = GetHitUnit();
+        Unit* caster = GetCaster();
+
+        if (_affected > 0  )
+        {           
+            caster->CastCustomSpell(_rend, SPELLVALUE_BASE_POINT0, 0, hitUnit, true);
+        }
+    }
+private:
+    uint8 _affected = 0;
+    uint8 _rank = 1;
+    uint32 _rend = 11574;
+    void Register() override
+    {
+        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_warr_improved_thunderclap::CountTargets, EFFECT_1, TARGET_UNIT_SRC_AREA_ENEMY);
+        //OnHit += SpellHitFn(spell_warr_improved_thunderclap::HandleScriptEffect);
+        AfterHit += SpellHitFn(spell_warr_improved_thunderclap::HandleAfterHit);
+    }
+};
+
+class spell_warr_improved_slam : public AuraScript
+{
+    PrepareAuraScript(spell_warr_improved_slam);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_WARRIOR_RECKLESSNESS });
+    }
+
+    void HandleEffectProc(AuraEffect const* aurEff, ProcEventInfo& /*eventInfo*/)
+    {
+        PreventDefaultAction();
+        if (Player* target = GetTarget()->ToPlayer())
+            target->ModifySpellCooldown(SPELL_WARRIOR_RECKLESSNESS, -aurEff->GetAmount());
+    }
+
+    void Register() override
+    {
+        OnEffectProc += AuraEffectProcFn(spell_warr_improved_slam::HandleEffectProc, EFFECT_0, SPELL_AURA_DUMMY);
+    }
+
+};
+
+// 80878 - One handed finesse 
+class spell_warr_one_handed_finesse : public AuraScript
+{
+    PrepareAuraScript(spell_warr_one_handed_finesse);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_WARRIOR_ONE_HANDED_FINESSE});
+    }
+
+    
+    bool CheckProc(ProcEventInfo& eventInfo)
+    {
+        return eventInfo.GetProcTarget();
+    }
+
+    void HandleProc(AuraEffect const* aurEff, ProcEventInfo& eventInfo)
+    {
+        PreventDefaultAction();
+
+        int32 absorb = int32(GetTarget()->CountPctFromMaxHealth(10.0));
+
+        GetTarget()->CastCustomSpell(SPELL_WARRIOR_ONE_HANDED_FINESSE, SPELLVALUE_BASE_POINT0, absorb, eventInfo.GetProcTarget(), true, nullptr, aurEff);
+    }
+
+    void Register() override
+    {
+        DoCheckProc += AuraCheckProcFn(spell_warr_one_handed_finesse::CheckProc);
+        OnEffectProc += AuraEffectProcFn(spell_warr_one_handed_finesse::HandleProc, EFFECT_1, SPELL_AURA_DUMMY);
+    }
+};
+
+class spell_warr_tactical_mastery : public SpellScript
+{
+    PrepareSpellScript(spell_warr_tactical_mastery);
+
+    enum Spell
+    {
+        WAR_SPELL_TACTICAL_MASTERY_BUFF = 80879,
+    };
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+{
+    return ValidateSpellInfo({ SPELL_WARRIOR_TACTICAL_MASTERY });
+}
+
+    void HandleScriptEffect(SpellEffIndex /*effIndex*/)
+    {
+        if (Unit* unitTarget = GetHitUnit())
+        {
+            if (GetCaster()->HasAura(12677) && unitTarget->IsInCombat())
+            {
+                // Battle Stance
+                if (GetCaster()->HasAura(21156))
+                {
+                    int32 amount = 20;
+                    unitTarget->CastCustomSpell(GetCaster(), WAR_SPELL_TACTICAL_MASTERY_BUFF, nullptr, nullptr, &amount, true, nullptr, nullptr, unitTarget->GetGUID());
+                }
+
+                // Berserker Stance
+                else if (GetCaster()->HasAura(7381))
+                {
+                    int32 amount = 5;
+                    unitTarget->CastCustomSpell(GetCaster(), WAR_SPELL_TACTICAL_MASTERY_BUFF, nullptr, &amount, nullptr, true, nullptr, nullptr, unitTarget->GetGUID());
+                }
+                // Defensive Stance
+                else if (GetCaster()->HasAura(7376))
+                {
+                    int32 amount = 10;
+                    unitTarget->CastCustomSpell(GetCaster(), WAR_SPELL_TACTICAL_MASTERY_BUFF, &amount, nullptr, nullptr, true, nullptr, nullptr, unitTarget->GetGUID());
+                }
+            }
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_warr_tactical_mastery::HandleScriptEffect, EFFECT_1, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+class spell_warr_unending_fury : public AuraScript
+{
+
+    PrepareAuraScript(spell_warr_unending_fury);
+
+    enum Spell
+    {
+        WAR_SPELL_UNENDING_FURY_DEBUFF = 80872,
+        WAR_SPELL_UNENDING_FURY_BUFF = 80873
+    };
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ WAR_SPELL_UNENDING_FURY_BUFF, WAR_SPELL_UNENDING_FURY_DEBUFF });
+    }
+
+    void HandleProc(AuraEffect const* aurEff, ProcEventInfo& eventInfo)
+    {
+        PreventDefaultAction();
+        if (GetCaster()->GetPowerPct(POWER_RAGE) >= 80 && !(GetCaster()->ToPlayer()->HasAura(WAR_SPELL_UNENDING_FURY_DEBUFF)))
+        {
+            GetTarget()->CastSpell(GetTarget(), WAR_SPELL_UNENDING_FURY_DEBUFF, true, nullptr, aurEff);
+            // Rank 3 
+            if (GetCaster()->HasAura(56930))
+                GetTarget()->CastSpell(GetTarget(), WAR_SPELL_UNENDING_FURY_BUFF, true, nullptr, aurEff);
+            // Rank 2
+            else if (GetCaster()->HasAura(56929))
+            {
+                int32 amount = 2;
+                int32 base = 10;
+                GetTarget()->CastCustomSpell(GetTarget(), WAR_SPELL_UNENDING_FURY_BUFF, &base, &amount, nullptr, true, nullptr, aurEff, GetCasterGUID());
+            }
+            // Rank 1
+            else if (GetCaster()->HasAura(56927))
+            {
+                int32 amount = 1;
+                int32 base = 5;
+                GetTarget()->CastCustomSpell(GetTarget(), WAR_SPELL_UNENDING_FURY_BUFF, &base, &amount, nullptr, true, nullptr, aurEff, GetCasterGUID());
+            }
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectProc += AuraEffectProcFn(spell_warr_unending_fury::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
     }
 };
 
@@ -898,6 +1138,7 @@ class spell_warr_retaliation : public AuraScript
 
 void AddSC_warrior_spell_scripts()
 {
+    RegisterSpellScript(spell_warr_improved_mortal_strike);
     RegisterSpellScript(spell_warr_mocking_blow);
     RegisterSpellScript(spell_warr_intervene);
     RegisterSpellScript(spell_warr_improved_spell_reflection);
@@ -922,5 +1163,10 @@ void AddSC_warrior_spell_scripts()
     RegisterSpellScript(spell_warr_vigilance);
     RegisterSpellScript(spell_warr_vigilance_trigger);
     RegisterSpellScript(spell_warr_t3_prot_8p_bonus);
+    RegisterSpellScript(spell_warr_improved_slam);
+    RegisterSpellScript(spell_warr_unending_fury);
+    RegisterSpellScript(spell_warr_one_handed_finesse);
+    RegisterSpellScript(spell_warr_tactical_mastery);
+    RegisterSpellScript(spell_warr_improved_thunderclap);
 }
 
