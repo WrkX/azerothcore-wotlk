@@ -467,6 +467,11 @@ void Spell::EffectSchoolDMG(SpellEffIndex effIndex)
                             }
                         }
                     }
+                    // Shadow Orb
+                    else if ((m_spellInfo->SpellFamilyFlags[2] & 0x20000000))
+                    {
+
+                    }
                     break;
                 }
             case SPELLFAMILY_DRUID:

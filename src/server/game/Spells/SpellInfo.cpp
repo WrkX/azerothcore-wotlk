@@ -2136,6 +2136,10 @@ AuraStateType SpellInfo::LoadAuraState() const
     if (SpellFamilyName == SPELLFAMILY_DRUID && SpellFamilyFlags[0] & 0x50)
         return AURA_STATE_SWIFTMEND;
 
+    // Shadoworb on Priest
+    if (SpellFamilyName == SPELLFAMILY_PRIEST && SpellFamilyFlags[2] & 0x20000000)
+        return AURA_STATE_SHADOWORB;
+
     // Deadly poison aura state
     if (SpellFamilyName == SPELLFAMILY_ROGUE && SpellFamilyFlags[0] & 0x10000)
         return AURA_STATE_DEADLY_POISON;

@@ -545,6 +545,64 @@ class spell_pri_pain_and_suffering_proc : public SpellScript
     }
 };
 
+class spell_pri_mind_blast : public SpellScript
+{
+    PrepareSpellScript(spell_pri_mind_blast);
+
+    void HandleEffectScriptEffect(SpellEffIndex /*effIndex*/)
+    {
+        // Refresh Shadow Word: Pain on target
+        if (Unit* unitTarget = GetHitUnit())
+            if (roll_chance_i(30))
+            {
+                GetCaster()->CastSpell(GetCaster(), 80883, true);
+            }
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_pri_mind_blast::HandleEffectScriptEffect, EFFECT_1, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+class spell_pri_devouring_plague : public SpellScript
+{
+    PrepareSpellScript(spell_pri_devouring_plague);
+
+    SpellCastResult CheckCast()
+    {
+        Unit* caster = GetCaster();
+        if (caster->HasAura(80883))
+        {
+            uint8 charges = caster->GetAura(80883)->GetStackAmount();
+            LOG_ERROR("spells.effect", "Charges {}", charges);
+                if (charges > 3)
+                {
+                        return SPELL_CAST_OK;
+                }
+        }
+        return SPELL_FAILED_NO_CHARGES_REMAIN;
+        
+    }
+
+
+    void HandleEffectScriptEffect(SpellEffIndex /*effIndex*/)
+    {
+        // Refresh Shadow Word: Pain on target
+        if (Unit* unitTarget = GetHitUnit())
+            if (roll_chance_i(30))
+            {
+                GetCaster()->CastSpell(GetCaster(), 80883, true);
+            }
+    }
+
+    void Register() override
+    {
+        OnCheckCast += SpellCheckCastFn(spell_pri_devouring_plague::CheckCast);
+        OnEffectHitTarget += SpellEffectFn(spell_pri_devouring_plague::HandleEffectScriptEffect, EFFECT_1, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
 // -47540 - Penance
 class spell_pri_penance : public SpellScript
 {
@@ -981,5 +1039,7 @@ void AddSC_priest_spell_scripts()
     RegisterSpellScript(spell_pri_vampiric_touch);
     RegisterSpellScript(spell_pri_mind_control);
     RegisterSpellScript(spell_pri_t4_4p_bonus);
+    RegisterSpellScript(spell_pri_mind_blast);
+    RegisterSpellScript(spell_pri_devouring_plague);
 }
 
